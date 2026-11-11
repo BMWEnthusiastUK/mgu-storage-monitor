@@ -4,7 +4,7 @@ A small, **read-only** storage-space monitor for BMW iDrive 7 head units with **
 
 ## Tested status
 
-**v1.2.2** has been installed and opened successfully on a **2021 BMW M4 G82, iDrive 7**, using MGU Store **0.9.35**. The owner also successfully tested updating, removing and reinstalling earlier versions. The v1.2.2 screen was visually checked in the car. **v1.2.3 is a candidate release and has not yet been tested in the car.** **Compatibility with other vehicles and software versions is unverified.**
+v1.2.3 has been installed and opened successfully on a 2021 BMW M4 G82 running iDrive 7 and MGU Store 0.9.35. The storage display was visually checked and works correctly. Compatibility with other vehicles and software versions remains unverified.
 
 The app reads local filesystem statistics and does **not** delete files, clean storage, modify vehicle firmware, or transmit readings to a server. Free filesystem space is **not necessarily the amount available for app installation**. Filesystem reserved space may make free + used smaller than total.
 
