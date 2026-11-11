@@ -19,3 +19,20 @@ const runner = function (command, args) { assert.strictEqual(command, 'df'); ass
 assert.strictEqual(storage.readVolumes('/var/opt/ab_storage', runner).length, 1, 'same filesystem deduplicated');
 assert.strictEqual(storage.readVolumes('/var/opt/ab_storage', function () { throw new Error('unavailable'); })[0].error, 'Not accessible');
 console.log('storage: OK');
+
+// Async fallback and de-duplication regressions.
+(async function () {
+    const fallback = await storage.readVolumesAsync('/missing', function (cmd, args, opts, cb) {
+        process.nextTick(function () { args[3] === '/missing' ? cb(new Error('missing')) : cb(null, sample); });
+    });
+    assert.strictEqual(fallback.find(function (v) { return !v.error; }).availKB, 6000000, 'fallback must remain usable');
+    const same = await storage.readVolumesAsync('/var/opt/app', function (cmd, args, opts, cb) {
+        process.nextTick(function () { cb(null, sample); });
+    });
+    assert.strictEqual(same.length, 1, 'async same filesystem deduplicated');
+    const failed = await storage.readVolumesAsync('/missing', function (cmd, args, opts, cb) {
+        process.nextTick(function () { cb(new Error('not available')); });
+    });
+    assert.strictEqual(failed.filter(function (v) { return !v.error; }).length, 0);
+    console.log('storage async: OK');
+})().catch(function (e) { console.error(e); process.exitCode = 1; });

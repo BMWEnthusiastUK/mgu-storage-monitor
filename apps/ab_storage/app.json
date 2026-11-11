@@ -2,7 +2,7 @@
   "id": "ab_storage",
   "title": "MGU Storage Monitor",
   "description": "Read-only display of filesystem space on the head unit. No background monitoring, no deletion, no network access.",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "license": "MIT",
   "vendor": "custom",
   "loggingId": "OAA2",

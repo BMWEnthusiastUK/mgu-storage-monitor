@@ -38,6 +38,32 @@ function readVolumes(dataDir, runner) {
     });
     return result;
 }
+function readVolumesAsync(dataDir, runner) {
+    const exec = runner || cp.execFile;
+    const candidates = [{ label: 'APP DATA STORAGE', target: dataDir }, { label: 'VAR OPT STORAGE', target: '/var/opt' }];
+    function readOne(item) {
+        return new Promise(function (resolve) {
+            try {
+                exec('df', ['-Pk', '--', item.target], { encoding: 'utf8', timeout: 2500 }, function (err, stdout) {
+                    const v = err ? null : parseDf(stdout);
+                    if (v) v.label = item.label;
+                    resolve(v || { label: item.label, error: 'Not accessible' });
+                });
+            } catch (e) { resolve({ label: item.label, error: 'Not accessible' }); }
+        });
+    }
+    // Check both targets: a failed app-data lookup must not hide a valid /var/opt reading.
+    return Promise.all(candidates.map(readOne)).then(function (volumes) {
+        const seen = {};
+        return volumes.filter(function (v) {
+            if (v.error) return true;
+            const key = v.device + '|' + v.mount;
+            if (seen[key]) return false;
+            seen[key] = true;
+            return true;
+        });
+    });
+}
 function fmt(kb) { return (kb * 1024 / 1000000000).toFixed(2); }
 function drawVolume(cv, t, v, x, y, heading) {
     cv.text(heading, x, y, 28, t.dim, { font: 'bold', spacing: 1.5 });
@@ -58,26 +84,35 @@ function drawVolume(cv, t, v, x, y, heading) {
 mgu.run({
     async start(ctx) {
         const ui = ctx.ui, log = ctx.log;
-        let timer = null;
+        let timer = null, screenVisible = false, generation = 0, busy = false;
         async function render() {
-            const volumes = readVolumes(ctx.dataDir);
-            const t = ctx.theme(), cv = ctx.canvas(W, H).clear(t.bg);
-            if (volumes.length) {
-                drawVolume(cv, t, volumes[0], 100, 90, 'MGU STORAGE');
-                // Most MGU paths share one partition. Never show duplicate free-space totals.
-                // A distinct second filesystem can be added in a future detailed view.
-            } else cv.text('Storage information unavailable', 80, 160, 36, t.text);
-            cv.text('Read only  |  Free disk space may differ from app installation capacity', 80, 445, 20, t.dim);
-            G.frame(cv, t, ['MGU Storage Monitor'], 0);
-            await ui.image('MAIN_GFX', cv);
+            if (!screenVisible || busy) return;
+            busy = true;
+            const current = generation;
+            try {
+                const volumes = await readVolumesAsync(ctx.dataDir);
+                if (!screenVisible || current !== generation) return;
+                const t = ctx.theme(), cv = ctx.canvas(W, H).clear(t.bg);
+                const primary = volumes.find(function (v) { return !v.error; });
+                if (primary) {
+                    drawVolume(cv, t, primary, 100, 90, 'MGU STORAGE');
+                    // Most MGU paths share one partition; do not show duplicate totals.
+                } else cv.text('Storage information unavailable', 80, 160, 36, t.text);
+                cv.text('Read only  |  Free disk space may differ from app installation capacity', 80, 445, 20, t.dim);
+                G.frame(cv, t, ['MGU Storage Monitor'], 0);
+                await ui.image('MAIN_GFX', cv);
+            } finally { busy = false; }
         }
         function redraw() { render().catch(function (e) { log.warn('storage display: ' + e); }); }
         ui.onVisible(function (name, visible) {
             if (name !== 'MAIN') return;
             clearInterval(timer); timer = null;
+            generation++;
+            // Do not issue disk reads or update the screen while hidden.
+            screenVisible = !!visible;
             if (visible) { redraw(); timer = setInterval(redraw, 15000); }
         });
         // Initial render is driven by the visibility callback.
     }
 });
-module.exports = { parseDf: parseDf, inspect: inspect, readVolumes: readVolumes, fmt: fmt };
+module.exports = { parseDf: parseDf, inspect: inspect, readVolumes: readVolumes, readVolumesAsync: readVolumesAsync, fmt: fmt };
